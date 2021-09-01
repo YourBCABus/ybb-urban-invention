@@ -80,7 +80,12 @@ async function sync(schoolID: string, spreadsheetID: string, googleKey: string, 
     });
 
     const sheetsResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetID}/values/Locations!A1:F?key=${googleKey}`);
-    const { values }: {values: string[]} = await sheetsResponse.json();
+    const res: {values: string[] | undefined} = await sheetsResponse.json();
+    if (!res.values) {
+        console.error(res);
+        throw new Error("Values not present");
+    }
+    const { values } = res;
     values.splice(0, 1);
     console.log("Fetched sheet.");
     
