@@ -108,12 +108,11 @@ async function sync(schoolID: string, spreadsheetID: string, googleKey: string, 
         return buses;
     }).flat();
 
-    const now = new Date();
     const invalidateTime = DateTime.now().setZone(school.timeZone ?? "UTC").startOf("day").plus({ days: 1 }).toUTC().toISO();
     for (const sheetBus of sheetBuses) {
         const ybbBus = ybbBuses.get(sheetBus.name);
         if (ybbBus) {
-            const boardingArea = (ybbBus.invalidateTime && ybbBus.invalidateTime < now) ? undefined : ybbBus.boardingArea;
+            const boardingArea = ybbBus.boardingArea;
             if ((boardingArea ?? undefined) !== sheetBus.boardingArea) {
                 console.log(`Updating ${ybbBus.name} (${ybbBus.id}) to boarding area ${sheetBus.boardingArea}`);
                 await ctx.updateBusStatus(ybbBus.id, sheetBus.boardingArea, invalidateTime);
