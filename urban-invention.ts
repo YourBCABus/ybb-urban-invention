@@ -65,7 +65,7 @@ function getSheetDiff(origData: readonly string[][], newData: readonly string[][
     const zippedData = Array(Math.max(origData.length, newData.length))
         .fill(null)
         .map(
-            (_, yIdx) => Array(Math.max(origData[yIdx].length, newData[yIdx].length))
+            (_, yIdx) => Array(Math.max((origData[yIdx] ?? []).length, (newData[yIdx] ?? []).length))
                 .fill(null)
                 .map((_, xIdx) => {return {origData: (origData[yIdx] ?? [])[xIdx] ?? "", newData: (newData[yIdx] ?? [])[xIdx] ?? ""}})
         );
