@@ -67,7 +67,7 @@ function getSheetDiff(origData: readonly string[][], newData: readonly string[][
         .map(
             (_, yIdx) => Array(Math.max(origData[yIdx].length, newData[yIdx].length))
                 .fill(null)
-                .map((_, xIdx) => {return {origData: origData[yIdx][xIdx], newData: newData[yIdx][xIdx]}})
+                .map((_, xIdx) => {return {origData: (origData[yIdx] ?? [])[xIdx] ?? "", newData: (newData[yIdx] ?? [])[xIdx] ?? ""}})
         );
 
     const newBuses = new Map();
