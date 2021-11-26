@@ -1,6 +1,9 @@
 import { DateTime } from "https://raw.githubusercontent.com/moment/luxon/2.0.2/src/luxon.js";
 
 import Context from "./context.ts";
+import ChangeQueue from "./changeQueue.ts";
+
+import initRedis from "./redis.ts";
 
 import getSchool from "./queries_mutations/getSchool.ts";
 import createBus from "./queries_mutations/createBus.ts";
@@ -43,7 +46,7 @@ type SheetChanges = {
     boardingAreaChanges: Map<string, string>
 };
 
-function handleInitialSheetData(sheetData: readonly string[][], busData: YbbBusMap): SheetChanges {
+function handleInitialSheetData(sheetData: readonly (readonly string[])[], busData: YbbBusMap): SheetChanges {
     const newBuses = new Map();
     const boardingAreaChanges = new Map();
     sheetData.forEach(row => {
@@ -61,7 +64,7 @@ function handleInitialSheetData(sheetData: readonly string[][], busData: YbbBusM
     return { newBuses, boardingAreaChanges };
 }
 
-function getSheetDiff(origData: readonly string[][], newData: readonly string[][], busData: YbbBusMap): SheetChanges {
+function getSheetDiff(origData: readonly (readonly string[])[], newData: readonly (readonly string[])[], busData: YbbBusMap): SheetChanges {
     const zippedData = Array(Math.max(origData.length, newData.length))
         .fill(null)
         .map(
@@ -89,14 +92,22 @@ function getSheetDiff(origData: readonly string[][], newData: readonly string[][
     return { newBuses, boardingAreaChanges };
 }
 
-function handleSheetData(origData: readonly string[][] | undefined, newData: readonly string[][], busData: YbbBusMap, copyOnInitial?: boolean): SheetChanges {
+function handleSheetData(origData: readonly (readonly string[])[] | undefined, newData: readonly (readonly string[])[], busData: YbbBusMap, copyOnInitial?: boolean): SheetChanges {
     if (origData === undefined) {
         if (copyOnInitial) return handleInitialSheetData(newData, busData);
         else return { newBuses: new Map(), boardingAreaChanges: new Map() };
     } else return getSheetDiff(origData, newData, busData);
 }
 
-async function sync(schoolID: string, oldSheetData: readonly string[][] | undefined, spreadsheetID: string, googleKey: string, credentials?: {id: string, secret: string}): Promise<readonly string[][]> {
+async function sync(
+    schoolID: string,
+    oldSheetData: readonly (readonly string[])[] | undefined,
+    spreadsheetID: string,
+    googleKey: string,
+    upDownEnables: {sheetToYbb: boolean, ybbToSheet: boolean},
+    changeQueue: ChangeQueue,
+    credentials?: {id: string, secret: string},
+): Promise<readonly (readonly string[])[]> {
     console.log("Starting sync...");
 
     // Get credentials.
@@ -106,25 +117,30 @@ async function sync(schoolID: string, oldSheetData: readonly string[][] | undefi
     const { timeZone, ybbBuses } = await getTzAndYbbBusMap(schoolID, ctx);
 
     // Poll the Google Sheet to get an update on the location of the buses.
-    const values = Object.freeze((await getSheetData(spreadsheetID, googleKey, "Locations!A1:F")).slice(1));
+    const preEditValues: readonly (readonly string[])[] = (await getSheetData(spreadsheetID, googleKey, "Locations!A1:F")).slice(1);
 
+    const values = upDownEnables.ybbToSheet ? changeQueue?.updateSheetTarget(preEditValues) : preEditValues;
+
+    // Get changes on the sheet
     const { newBuses, boardingAreaChanges } = handleSheetData(oldSheetData, values, ybbBuses, true);
 
-    const invalidateTime = DateTime.now().setZone(timeZone ?? "UTC").startOf("day").plus({ days: 1 }).toUTC().toISO();
-    await Promise.all([
-        ...Array.from(newBuses.entries()).map(async ([name, boardingArea]) => {
-            console.log(`Creating bus with name ${name}`);
-            const { createBus: { id } } = await ctx.query(createBus, createBus.formatVariables(schoolID, name));
-            console.log(`Updating ${name} (${id}) to boarding area ${boardingArea}`);
-            return await ctx.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
-        }),
-        ...Array.from(boardingAreaChanges.entries()).map(async ([name, boardingArea]) => {
-            const ybbBus = ybbBuses.get(name);
-            if (!ybbBus) return;
-            console.log(`Updating ${ybbBus.name} (${ybbBus.id}) to boarding area ${boardingArea}`);
-            return await ctx.query(updateBusStatus, updateBusStatus.formatVariables(ybbBus.id, boardingArea, invalidateTime));
-        }),
-    ])
+    if (upDownEnables.sheetToYbb) {
+        const invalidateTime = DateTime.now().setZone(timeZone ?? "UTC").startOf("day").plus({ days: 1 }).toUTC().toISO();
+        await Promise.all([
+            ...Array.from(newBuses.entries()).map(async ([name, boardingArea]) => {
+                console.log(`Creating bus with name ${name}`);
+                const { createBus: { id } } = await ctx.query(createBus, createBus.formatVariables(schoolID, name));
+                console.log(`Updating ${name} (${id}) to boarding area ${boardingArea}`);
+                return await ctx.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
+            }),
+            ...Array.from(boardingAreaChanges.entries()).map(async ([name, boardingArea]) => {
+                const ybbBus = ybbBuses.get(name);
+                if (!ybbBus) return;
+                console.log(`Updating ${ybbBus.name} (${ybbBus.id}) to boarding area ${boardingArea}`);
+                return await ctx.query(updateBusStatus, updateBusStatus.formatVariables(ybbBus.id, boardingArea, invalidateTime));
+            }),
+        ]);
+    }
 
     console.log("Sync complete.");
     return values;
@@ -137,12 +153,18 @@ const id = Deno.env.get("YBB_CLIENT_ID");
 const secret = Deno.env.get("YBB_CLIENT_SECRET");
 const credentials = (id && secret) ? {id, secret} : undefined;
 
+const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
+
+const queuedChanges = new ChangeQueue();
+
+initRedis(queuedChanges);
+
 if (Deno.env.get("CRON_MODE")) {
     console.log("Running in cron mode");
-    let oldSheetData: readonly string[][] | undefined = undefined;
+    let oldSheetData: readonly (readonly string[])[] | undefined = undefined;
     while (true) {
         try {
-            oldSheetData = await sync(schoolID, oldSheetData, spreadsheetID, googleKey!, credentials);
+            oldSheetData = await sync(schoolID, oldSheetData, spreadsheetID, googleKey!, upDownEnables, queuedChanges, credentials);
         } catch (e) {
             console.error(e);
             console.log("Sync interrupted.");
@@ -150,5 +172,5 @@ if (Deno.env.get("CRON_MODE")) {
         await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
     }
 } else {
-    await sync(schoolID, undefined, spreadsheetID, googleKey!, credentials);
+    await sync(schoolID, undefined, spreadsheetID, googleKey!, upDownEnables, queuedChanges, credentials);
 }
