@@ -45,7 +45,9 @@ export default class ChangeQueue {
             switch (change.tag) {
                 case "BAC": {
                     const location = map.get(change.data.busName)!;
-                    mutableSheet[location[0]][location[1]] = change.data.newBoardingArea;
+                    mutableSheet[location[0]][location[1]] = change.data.busName;
+                    mutableSheet[location[0]][location[1] + 1] = change.data.newBoardingArea;
+                    
                     break;
                 }
 
