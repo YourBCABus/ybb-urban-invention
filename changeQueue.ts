@@ -69,12 +69,8 @@ export default class ChangeQueue {
 
     public updateSheetTarget(sheet: readonly (readonly string[])[]): readonly (readonly string[])[] {
         const changes = this.changes;
-        this.clearQueue();
-
         const map = this.rebuildMap(sheet);
-        
         return this.applyChanges(sheet, map, changes);
-        
     }
 
     public clearQueue() {

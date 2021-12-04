@@ -62,7 +62,6 @@ async function _initRedis(changeQueue: ChangeQueue) {
             const messageObj: BoardingAreaChangeMessage = JSON.parse(message);
 
             if (hash === messageObj.clientHash) continue;
-            console.log({client: hash, server: messageObj.clientHash});
             changeQueue.queueBoardingAreaChange(messageObj);
         }
     })();

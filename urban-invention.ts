@@ -119,10 +119,11 @@ async function sync(
     // Poll the Google Sheet to get an update on the location of the buses.
     const preEditValues: readonly (readonly string[])[] = (await getSheetData(spreadsheetID, googleKey, "Locations!A1:F")).slice(1);
 
-    const values = upDownEnables.ybbToSheet ? changeQueue?.updateSheetTarget(preEditValues) : preEditValues;
+    const oldValues = oldSheetData && changeQueue.updateSheetTarget(oldSheetData);
+    const values = changeQueue.updateSheetTarget(preEditValues);
 
     // Get changes on the sheet
-    const { newBuses, boardingAreaChanges } = handleSheetData(oldSheetData, values, ybbBuses, true);
+    const { newBuses, boardingAreaChanges } = handleSheetData(oldValues, values, ybbBuses, true);
 
     if (upDownEnables.sheetToYbb) {
         const invalidateTime = DateTime.now().setZone(timeZone ?? "UTC").startOf("day").plus({ days: 1 }).toUTC().toISO();
@@ -140,6 +141,11 @@ async function sync(
                 return await ctx.query(updateBusStatus, updateBusStatus.formatVariables(ybbBus.id, boardingArea, invalidateTime));
             }),
         ]);
+    }
+
+    if (upDownEnables.ybbToSheet) {
+        throw new Error("ybbToSheet is unimplemented.");
+        changeQueue.clearQueue();
     }
 
     console.log("Sync complete.");
