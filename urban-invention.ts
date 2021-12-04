@@ -144,8 +144,9 @@ async function sync(
     }
 
     if (upDownEnables.ybbToSheet) {
-        throw new Error("ybbToSheet is unimplemented.");
-        changeQueue.clearQueue();
+        // throw new Error("ybbToSheet is unimplemented.");
+        // changeQueue.clearQueue();
+        console.error("`upDownEnables.ybbToSheet` is unimplemented.");
     }
 
     console.log("Sync complete.");
