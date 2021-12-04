@@ -3,6 +3,7 @@ export type BoardingAreaChangeMessage = {
     busID: string,
     busName: string,
     newBoardingArea: string,
+    clientHash: string,
 };
 
 export type BusNameChangeMessage = {
