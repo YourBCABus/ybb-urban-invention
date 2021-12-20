@@ -1,6 +1,4 @@
-import { DateTime } from "https://raw.githubusercontent.com/moment/luxon/2.0.2/src/luxon.js";
-
-import { Query, hasOwnProperty } from "../context.ts";
+import { Query, hasOwnProperty } from "../context";
 
 
 const updateBusStatusMutationText = `
@@ -44,12 +42,17 @@ function formatVariables(
     boardingArea: string | undefined,
     invalidateTime: string
 ) {
+    const fallbackDate = new Date();
+    fallbackDate.setHours(0);
+    fallbackDate.setMinutes(0);
+    fallbackDate.setSeconds(0);
+    fallbackDate.setMilliseconds(0);
     
     return {
         busID,
         boardingArea,
         invalidateTime: !boardingArea?.trim() || boardingArea.trim() === "?"
-            ? DateTime.now().startOf("day").toUTC().toISO()
+            ? fallbackDate.toISOString()
             : invalidateTime,
     };
 }

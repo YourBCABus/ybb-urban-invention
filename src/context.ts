@@ -1,3 +1,5 @@
+import fetch from "node-fetch";
+
 export function hasOwnProperty<X extends object, Y extends PropertyKey>(obj: X, prop: Y): obj is X & Record<Y, unknown> {
     return Object.prototype.hasOwnProperty.call(obj, prop);
 }
@@ -26,7 +28,7 @@ export default class Context {
                 variables
             })
         });
-        const { data, errors } = await response.json();
+        const { data, errors } = (await response.json()) as any;
         if (errors && errors.length > 0) {
             throw new Error(errors[0].message);
         } else {
@@ -43,7 +45,7 @@ export default class Context {
             },
             body: `client_id=${encodeURIComponent(credentials.id)}&client_secret=${encodeURIComponent(credentials.secret)}&grant_type=client_credentials&scope=read%20bus.create%20bus.updateStatus`
         });
-        const json = await response.json();
+        const json = (await response.json()) as any;
         if (json.error) {
             console.error(json);
         }

@@ -1,4 +1,4 @@
-import { Query, hasOwnProperty } from "../context.ts";
+import { Query, hasOwnProperty } from "../context";
 
 const getSchoolQueryText = `
 query GetSchool($schoolID: ID!) {

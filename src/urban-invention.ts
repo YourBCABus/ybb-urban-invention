@@ -1,24 +1,25 @@
-import { DateTime } from "https://raw.githubusercontent.com/moment/luxon/2.0.2/src/luxon.js";
+import { DateTime } from "luxon";
+import fetch from "node-fetch";
 
-import Context from "./context.ts";
-import ChangeQueue from "./changeQueue.ts";
+import Context from "./context";
+import ChangeQueue from "./changeQueue";
 
-import initRedis from "./redis.ts";
+import initRedis from "./redis";
 
-import getSchool from "./queries_mutations/getSchool.ts";
-import createBus from "./queries_mutations/createBus.ts";
-import updateBusStatus from "./queries_mutations/updateBusStatus.ts";
+import getSchool, { ValidatedType as GetSchoolType } from "./queries_mutations/getSchool";
+import createBus from "./queries_mutations/createBus";
+import updateBusStatus from "./queries_mutations/updateBusStatus";
 
 const CRON_MODE_DELAY = 30 * 1000;
 
 
 type YbbBusMap = Map<string, {id: string, name: string, boardingArea?: string, invalidateTime?: Date}>;
 async function getTzAndYbbBusMap(schoolID: string, ctx: Context): Promise<{ timeZone: string | null, ybbBuses: YbbBusMap }> {
-    const { school } = await ctx.query(getSchool, {schoolID});
+    const { school }: GetSchoolType = await ctx.query(getSchool, {schoolID});
     console.log("Fetched school.");
     
     const ybbBuses: YbbBusMap = new Map();
-    school.buses.forEach((bus) => {
+    school.buses.forEach(bus => {
         if (ybbBuses.has(bus.name)) return;
         ybbBuses.set(bus.name, bus)
     });
@@ -28,7 +29,7 @@ async function getTzAndYbbBusMap(schoolID: string, ctx: Context): Promise<{ time
 
 async function getSheetData(spreadsheetID: string, googleKey: string, range: string): Promise<string[][]> {
     const sheetsResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetID}/values/${range}?key=${googleKey}`);
-    const res: {values: string[][] | undefined} = await sheetsResponse.json();
+    const res: {values: string[][] | undefined} = (await sheetsResponse.json()) as any;
     console.log("Fetched sheet.");
 
     if (!res.values) {
@@ -153,11 +154,11 @@ async function sync(
     return values;
 }
 
-const schoolID = Deno.env.get("SCHOOL_ID")!;
-const spreadsheetID = Deno.env.get("SPREADSHEET_ID")!;
-const googleKey = Deno.env.get("API_KEY");
-const id = Deno.env.get("YBB_CLIENT_ID");
-const secret = Deno.env.get("YBB_CLIENT_SECRET");
+const schoolID = process.env.SCHOOL_ID!;
+const spreadsheetID = process.env.SPREADSHEET_ID!;
+const googleKey = process.env.API_KEY;
+const id = process.env.YBB_CLIENT_ID;
+const secret = process.env.YBB_CLIENT_SECRET;
 const credentials = (id && secret) ? {id, secret} : undefined;
 
 const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
@@ -166,18 +167,21 @@ const queuedChanges = new ChangeQueue();
 
 initRedis(queuedChanges);
 
-if (Deno.env.get("CRON_MODE")) {
-    console.log("Running in cron mode");
-    let oldSheetData: readonly (readonly string[])[] | undefined = undefined;
-    while (true) {
-        try {
-            oldSheetData = await sync(schoolID, oldSheetData, spreadsheetID, googleKey!, upDownEnables, queuedChanges, credentials);
-        } catch (e) {
-            console.error(e);
-            console.log("Sync interrupted.");
+(async () => {
+    if (process.env.CRON_MODE) {
+        console.log("Running in cron mode");
+        let oldSheetData: readonly (readonly string[])[] | undefined = undefined;
+        while (true) {
+            try {
+                oldSheetData = await sync(schoolID, oldSheetData, spreadsheetID, googleKey!, upDownEnables, queuedChanges, credentials);
+            } catch (e) {
+                console.error(e);
+                console.log("Sync interrupted.");
+            }
+            await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
         }
-        await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
+    } else {
+        await sync(schoolID, undefined, spreadsheetID, googleKey!, upDownEnables, queuedChanges, credentials);
     }
-} else {
-    await sync(schoolID, undefined, spreadsheetID, googleKey!, upDownEnables, queuedChanges, credentials);
-}
+})();
+

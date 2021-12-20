@@ -1,4 +1,4 @@
-import { Query, hasOwnProperty } from "../context.ts";
+import { Query, hasOwnProperty } from "../context";
 
 const createBusMutationText = `
 mutation CreateBus($schoolID: ID!, $name: String) {
