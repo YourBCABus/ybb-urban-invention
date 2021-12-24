@@ -1,26 +1,27 @@
 import { DateTime } from "luxon";
 import fetch from "node-fetch";
 
-import Context from "./context";
-import ChangeQueue from "./changeQueue";
+import Context from "./context.js";
+import ChangeQueue from "./changeQueue.js";
 
-import initRedis from "./redis";
+import initRedis from "./redis.js";
 
-import getSchool, { ValidatedType as GetSchoolType } from "./queries_mutations/getSchool";
-import createBus from "./queries_mutations/createBus";
-import updateBusStatus from "./queries_mutations/updateBusStatus";
+import getSchool, { ValidatedType as GetSchoolType } from "./queries_mutations/getSchool.js";
+import createBus from "./queries_mutations/createBus.js";
+import updateBusStatus from "./queries_mutations/updateBusStatus.js";
 
 const CRON_MODE_DELAY = 30 * 1000;
 
 
-type YbbBusMap = Map<string, {id: string, name: string, boardingArea?: string, invalidateTime?: Date}>;
+type YbbBusMap = Map<string, {id: string, name?: string, boardingArea?: string, invalidateTime?: Date}>;
 async function getTzAndYbbBusMap(schoolID: string, ctx: Context): Promise<{ timeZone: string | null, ybbBuses: YbbBusMap }> {
     const { school }: GetSchoolType = await ctx.query(getSchool, {schoolID});
     console.log("Fetched school.");
     
     const ybbBuses: YbbBusMap = new Map();
     school.buses.forEach(bus => {
-        if (ybbBuses.has(bus.name)) return;
+        
+        if (!bus.name || ybbBuses.has(bus.name)) return;
         ybbBuses.set(bus.name, bus)
     });
     console.log("Created bus map.")

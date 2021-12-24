@@ -1,4 +1,4 @@
-import { Query, hasOwnProperty } from "../context";
+import { Query, hasOwnProperty } from "../context.js";
 
 
 const updateBusStatusMutationText = `

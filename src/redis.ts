@@ -1,7 +1,7 @@
 import { createClient } from "redis";
 
 import crypto from "crypto";
-import ChangeQueue, { BoardingAreaChangeMessage } from "./changeQueue";
+import ChangeQueue, { BoardingAreaChangeMessage } from "./changeQueue.js";
 import { RedisClientType } from "@node-redis/client/dist/lib/client";
 
 const id = process.env.YBB_CLIENT_ID ?? "000000000000000000000000";

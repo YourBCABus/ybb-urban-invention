@@ -1,4 +1,4 @@
-import { Query, hasOwnProperty } from "../context";
+import { Query, hasOwnProperty } from "../context.js";
 
 const getSchoolQueryText = `
 query GetSchool($schoolID: ID!) {
@@ -19,7 +19,7 @@ export type ValidatedType = {
         timeZone: string | null,
         buses: {
             id: string,
-            name: string,
+            name?: string,
             boardingArea?: string,
             invalidateTime?: Date,
         }[]
@@ -53,14 +53,14 @@ function validateFunction(input: unknown): ValidatedType {
                     ) {
                         const { id, name, boardingArea, invalidateTime } = entry;
                         if (
-                            typeof id              === "string" &&
-                            typeof name            === "string" &&
-                            (typeof boardingArea   === "string" || boardingArea === null)&&
+                            (typeof id             === "string") &&
+                            (typeof name           === "string" || name           === null) &&
+                            (typeof boardingArea   === "string" || boardingArea   === null) &&
                             (typeof invalidateTime === "string" || invalidateTime === null)
                         ) {
                             return {
                                 id,
-                                name,
+                                name: name ?? undefined,
                                 boardingArea: boardingArea ?? undefined,
                                 invalidateTime: invalidateTime ? new Date(invalidateTime) : undefined,
                             };
