@@ -1,3 +1,10 @@
+# Node stuff
 package-lock.json
 node_modules
+
+# Compiled typescript code.
 dist
+
+# For google oauth
+oauth-credentials.json
+oauth-token.json
