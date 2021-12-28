@@ -96,32 +96,39 @@ export default class SheetContext {
     }
 
     public async makeApiRequest(data: Update[]) {
-        try {
-            const response = (await sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId: this.id,
-                requestBody: {
-                    valueInputOption: "USER_ENTERED",
-                    data,
-                },
-                auth: this.auth,
-            })).data;
+        const response = (await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: this.id,
+            requestBody: {
+                valueInputOption: "USER_ENTERED",
+                data,
+            },
+            auth: this.auth,
+        })).data;
 
-            // Change code below to process the `response` object if we
-            // actually need data from it in the future:
-            console.log(JSON.stringify(response, null, 2));
-        } catch (err) {
-            console.error(err);
-        }
+        // Change code below to process the `response` object if we
+        // actually need data from it in the future:
+        // console.log(JSON.stringify(response, null, 2));
+    }
+
+    public async getSheet(): Promise<string[][]> {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: this.id,
+            majorDimension: "ROWS",
+            auth: this.auth,
+            valueRenderOption: "UNFORMATTED_VALUE",
+            range: "Locations!A:ZZ"
+        });
+        return response.data.values || [];
     }
 }
 
-(async () => {
-    const context = await SheetContext.authenticateAndCreate(process.env.SPREADSHEET_ID!);
+// (async () => {
+//     const context = await SheetContext.authenticateAndCreate(process.env.SPREADSHEET_ID!);
 
-    context.makeApiRequest([{
-        values: [["Hello!"]],
-        majorDimension: "ROWS",
-        range: `Locations!${xyToRange(6, 24)}:${xyToRange(6, 24)}`,
-    }]);
+//     context.makeApiRequest([{
+//         values: [["Hello!"]],
+//         majorDimension: "ROWS",
+//         range: `Locations!${xyToRange(6, 24)}:${xyToRange(6, 24)}`,
+//     }]);
 
-})();
+// })();

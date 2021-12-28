@@ -1,12 +1,12 @@
-import { BoardingAreaChangeMessage } from "./changeQueue.js";
 import getSchool from "./queries_mutations/getSchool.js";
 import { range } from "./utils.js";
-import Context from "./context.js";
+import YbbContext from "./ybbContext.js";
 
 type SheetPos = {x: number, y: number};
 
 function getPosition(sheet: string[][], x: number, y: number) {
-    return sheet[y].slice(x, x + 3);
+    const base = sheet[y].slice(x, x + 3);
+    return [...base, ...Array.from(range(3)).map(() => "").slice(base.length)];
 }
 
 function mapPositions<T>(sheet: string[][], callback: (data: string[], pos: SheetPos) => T, runOnLocation: (data: string[], location: SheetPos) => boolean): T[] {
@@ -66,7 +66,7 @@ export class SheetBusModel implements BusModel<SheetPos> {
     }
 }
 
-export default interface DataModel<T> {
+export interface DataModel<T> {
     buses: BusModel<T>[];
 }
 
@@ -77,7 +77,11 @@ export class SheetDataModel implements DataModel<SheetPos> {
         const usedPositions = new Set<string>();
         this.buses.forEach(bus => bus.updateFromSheet(sheet, usedPositions));
         
-        const newBuses = mapPositions(sheet, (data, pos) => new SheetBusModel(null, data[0].trim(), data[1].trim(), pos), (data, pos) => data[0].trim().length !== 0 && !usedPositions.has(`${pos.x},${pos.y}`));
+        const newBuses = mapPositions(
+            sheet,
+            (data, pos) => new SheetBusModel(null, data[0].trim(), data[1].trim(), pos),
+            (data, pos) => data[0].trim().length !== 0 && !usedPositions.has(`${pos.x},${pos.y}`)
+        );
         this.buses.push(...newBuses);
     }
 
@@ -90,20 +94,14 @@ export class SheetDataModel implements DataModel<SheetPos> {
 export class YBBDataModel implements DataModel<undefined> {
     constructor(public buses: BusModel<undefined>[]) {}
 
-    public async updateFromYBB(context: Context) {
-
-        const { school } = await context.query(getSchool);
+    public async updateFromYBB(context: YbbContext) {
+        const { school } = await context.query(getSchool, {schoolID: context.schoolId});
         this.buses = school.buses.map(bus => ({
             id: bus.id,
             name: bus.name ?? null,
             boardingArea: bus.boardingArea ?? null,
             info: undefined,
         }));
-    }
-
-    public handleBoardingAreaChangeMessage(message: BoardingAreaChangeMessage) {
-        const bus = this.buses.find(bus => bus.id === message.busID);
-        if (bus) bus.boardingArea = message.newBoardingArea;
     }
 
     // Updates the model and applies the change to the YourBCABus API.
@@ -219,4 +217,11 @@ export class GroundTruthDataModel implements DataModel<undefined> {
             }
         });
     }
+}
+
+
+export default interface DataModels {
+    sheet: SheetDataModel;
+    ybb: YBBDataModel;
+    truth: GroundTruthDataModel
 }

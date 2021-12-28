@@ -1,4 +1,5 @@
-import { Query, hasOwnProperty } from "../context.js";
+import { Query } from "../ybbContext.js";
+import { hasOwnProperty } from "../utils.js";
 
 const createBusMutationText = `
 mutation CreateBus($schoolID: ID!, $name: String) {

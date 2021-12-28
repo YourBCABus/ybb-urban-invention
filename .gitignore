@@ -8,3 +8,6 @@ dist
 # For google oauth
 oauth-credentials.json
 oauth-token.json
+
+# For YBB auth
+ybb-credentials.json
