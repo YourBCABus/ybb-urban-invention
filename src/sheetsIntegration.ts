@@ -1,7 +1,9 @@
 import { google } from "googleapis";
 const sheets = google.sheets('v4');
+
 import { readFile, writeFile } from "fs/promises";
 import { Credentials, OAuth2Client } from "google-auth-library";
+
 import { askQuestion } from "./utils.js";
 
 // If modifying these scopes, delete token.json.
@@ -80,9 +82,9 @@ async function initSheetsOAuth(): Promise<OAuth2Client> {
 
 const numToLetters = (num: number): string => num.toString(26).split("").map(num => String.fromCharCode(65 + parseInt(num, 26))).join("");
 
-const xyToRange = (x: number, y: number): string => `${numToLetters(x)}${y + 1}`;
+export const xyToRange = (x: number, y: number): string => `${numToLetters(x)}${y + 1}`;
 
-interface Update {
+export interface Update {
     values: string[][];
     majorDimension: "ROWS";
     range: `${string}!${string}:${string}`;
@@ -96,14 +98,23 @@ export default class SheetContext {
     }
 
     public async makeApiRequest(data: Update[]) {
-        const response = (await sheets.spreadsheets.values.batchUpdate({
+        await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: this.id,
             requestBody: {
                 valueInputOption: "USER_ENTERED",
                 data,
             },
             auth: this.auth,
-        })).data;
+        });
+
+        // const response = (await sheets.spreadsheets.values.batchUpdate({
+        //     spreadsheetId: this.id,
+        //     requestBody: {
+        //         valueInputOption: "USER_ENTERED",
+        //         data,
+        //     },
+        //     auth: this.auth,
+        // })).data;
 
         // Change code below to process the `response` object if we
         // actually need data from it in the future:
@@ -118,7 +129,8 @@ export default class SheetContext {
             valueRenderOption: "UNFORMATTED_VALUE",
             range: "Locations!A:ZZ"
         });
-        return response.data.values || [];
+        const rawValues = response.data.values || [];
+        return rawValues.map(row => row.map(cell => String(cell)));
     }
 }
 

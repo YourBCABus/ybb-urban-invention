@@ -3,7 +3,7 @@ import SheetContext from "./sheetsIntegration.js";
 
 import DataModels, { GroundTruthDataModel, SheetDataModel, YBBDataModel } from "./dataModel.js";
 
-const CRON_MODE_DELAY = 30 * 1000;
+const CRON_MODE_DELAY = 10 * 1000;
 
 async function sync(
     dataModels: DataModels,
@@ -15,16 +15,22 @@ async function sync(
 
     await dataModels.ybb.updateFromYBB(ybbContext);
 
-    dataModels.sheet.updateFromSheet(await sheetContext.getSheet());
+    dataModels.sheet.updateFromSheetAndYbb(await sheetContext.getSheet(), dataModels.ybb);
 
-    // Poll the Google Sheet to get an update on the location of the buses.
+    dataModels.truth.update(dataModels.ybb, dataModels.sheet);
 
     if (upDownEnables.sheetToYbb) {
         console.error("`upDownEnables.sheetToYbb` is unimplemented.");
     }
 
     if (upDownEnables.ybbToSheet) {
-        console.error("`upDownEnables.ybbToSheet` is unimplemented.");
+        console.error("`upDownEnables.ybbToSheet` is not fully implemented.");
+        dataModels.sheet.applyChanges(
+            dataModels.truth.diffOutgoingChanges(
+                dataModels.sheet,
+            ),
+            sheetContext,
+        );
     }
 }
 
