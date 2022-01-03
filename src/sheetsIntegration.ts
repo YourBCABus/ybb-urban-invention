@@ -101,7 +101,7 @@ export default class SheetContext {
         await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: this.id,
             requestBody: {
-                valueInputOption: "USER_ENTERED",
+                valueInputOption: "RAW",
                 data,
             },
             auth: this.auth,

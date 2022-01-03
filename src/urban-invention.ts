@@ -2,6 +2,9 @@ import YbbContext from "./ybbContext.js";
 import SheetContext from "./sheetsIntegration.js";
 
 import DataModels, { GroundTruthDataModel, SheetDataModel, YBBDataModel } from "./dataModel.js";
+import { Logger } from "./utils.js";
+
+export var logger = new Logger();
 
 const CRON_MODE_DELAY = 10 * 1000;
 
@@ -11,27 +14,54 @@ async function sync(
     sheetContext: SheetContext,
     upDownEnables: {sheetToYbb: boolean, ybbToSheet: boolean},
 ): Promise<void> {
-    console.log("Starting sync...");
+    logger.log("Starting sync...");
+    logger.indent();
+    {
+        await dataModels.ybb.updateFromYBB(ybbContext);
+    
+        dataModels.sheet.updateFromSheetAndYbb(await sheetContext.getSheet(), dataModels.ybb);
+    
+        dataModels.truth.update(dataModels.ybb, dataModels.sheet);
 
-    await dataModels.ybb.updateFromYBB(ybbContext);
 
-    dataModels.sheet.updateFromSheetAndYbb(await sheetContext.getSheet(), dataModels.ybb);
 
-    dataModels.truth.update(dataModels.ybb, dataModels.sheet);
-
-    if (upDownEnables.sheetToYbb) {
-        console.error("`upDownEnables.sheetToYbb` is unimplemented.");
+        logger.log("Persisting new data to sheet/ybb...");
+        
+        if (upDownEnables.sheetToYbb) {
+            logger.indent();
+            {
+                logger.log("Getting outgoing changes...");
+                const outgoingChanges = dataModels.truth.diffOutgoingChanges(
+                    dataModels.ybb,
+                );
+            
+                logger.log("Applying changes to YBB...");
+                await dataModels.ybb.applyChanges(
+                    outgoingChanges,
+                    ybbContext,
+                );
+            }
+            logger.unindent();
+        }
+    
+        if (upDownEnables.ybbToSheet) {
+            logger.indent();
+            {
+                logger.log("Getting outgoing changes...");
+                const outgoingChanges = dataModels.truth.diffOutgoingChanges(
+                    dataModels.sheet,
+                );
+                
+                logger.log("Applying changes to sheet...");
+                await dataModels.sheet.applyChanges(
+                    outgoingChanges,
+                    sheetContext,
+                );
+            }
+            logger.unindent();
+        }
     }
-
-    if (upDownEnables.ybbToSheet) {
-        console.error("`upDownEnables.ybbToSheet` is not fully implemented.");
-        dataModels.sheet.applyChanges(
-            dataModels.truth.diffOutgoingChanges(
-                dataModels.sheet,
-            ),
-            sheetContext,
-        );
-    }
+    logger.unindent();
 }
 
 const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
@@ -53,19 +83,25 @@ const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
     if (process.env.CRON_MODE) {
         while (true) {
             try {
+                logger.log(`Syncing at ${new Date().toUTCString()}...`);
                 await sync(dataModels, ybbContext, sheetContext, upDownEnables);
+                logger.reset();
             } catch (e) {
-                console.error(e);
-                console.log("Sync interrupted.");
+                logger.reset();
+                logger.error(e);
+                logger.log("Sync interrupted.");
             }
             await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
         }
     } else {
         try {
+            logger.log(`Syncing at ${new Date().toUTCString()}...`);
             await sync(dataModels, ybbContext, sheetContext, upDownEnables);
+            logger.reset();
         } catch (e) {
-            console.error(e);
-            console.log("Sync interrupted.");
+            logger.reset();
+            logger.error(e);
+            logger.log("Sync interrupted.");
         }
     }
 })();

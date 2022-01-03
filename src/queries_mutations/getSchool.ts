@@ -91,6 +91,7 @@ const getSchool: Query<ValidatedType, typeof formatVariables> = {
     queryText: getSchoolQueryText,
     formatVariables,
     validateFunction,
+    queryName: "getSchool",
 };
 
 export default getSchool;

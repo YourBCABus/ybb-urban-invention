@@ -1,12 +1,19 @@
 import getSchool, { ValidatedType as GetSchoolOutputType } from "./queries_mutations/getSchool.js";
 import SheetContext, { Update, xyToRange } from "./sheetsIntegration.js";
+import { logger } from "./urban-invention.js";
 import { range } from "./utils.js";
 import YbbContext from "./ybbContext.js";
+import createBus from "./queries_mutations/createBus.js";
+import getBus from "./queries_mutations/getBus.js";
+import updateBus from "./queries_mutations/updateBus.js";
+import updateBusStatus from "./queries_mutations/updateBusStatus.js";
+import { DateTime } from "luxon";
 
 type SheetPos = {x: number, y: number};
+const posToString = (pos: SheetPos) => `${pos.x},${pos.y}`;
 
 function getPosition(sheet: string[][], x: number, y: number) {
-    const base = sheet[y].slice(x, x + 3);
+    const base = (sheet[y] ?? []).slice(x, x + 3);
     return [...base, ...Array.from(range(3)).map(() => "").slice(base.length)];
 }
 
@@ -19,7 +26,7 @@ function mapPositions<T>(sheet: string[][], callback: (data: string[], pos: Shee
             if (runOnLocation(data, pos)) results.push(callback(data, pos));
         }
     }
-    
+
     return results;
 }
 
@@ -96,10 +103,17 @@ export interface UpdatableDataModel<T, C> extends DataModel<T> {
     applyChanges(changes: BusDifference[], context: C): Promise<void>;
 }
 
+export interface FreeAreas {
+    width: number;
+    freeSpaces: number[][];
+    numLeft: number;
+}
+
 export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext> {
     constructor(public buses: SheetBusModel[]) {}
 
     public updateFromSheetAndYbb(rawSheet: string[][], ybbModel: YBBDataModel): void {
+        logger.log()
         const sheet = rawSheet.slice(1);
 
         const usedPositions = new Set<string>();
@@ -121,17 +135,58 @@ export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext
         });
     }
 
-    diffToUpdate(diff: BusDifference): Update | undefined {
+    private calcFreeSpaces(oldAreas?: FreeAreas): FreeAreas {
+        if (oldAreas) return {
+            width: oldAreas.width, 
+            freeSpaces: [...oldAreas.freeSpaces, Array.from(range(0, oldAreas.width, 3))],
+            numLeft: oldAreas.numLeft + Math.ceil(oldAreas.width / 3), 
+        }
+        else {
+            const busCells = this.buses.map(bus => bus.info);
+            
+            busCells.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+            const { x, y, } = busCells.reduce(
+                (currMax, newLoc) => ({ x: Math.max(currMax.x, newLoc.x), y: Math.max(currMax.y, newLoc.y) }),
+                { x: 0, y: 0 }
+            );
+
+            const maxX = x + 1 + (x + 1) % 3;
+            const maxY = y + 1;
+
+            const availableCells: number[][] = Array.from(range(maxY + 1)).map(() => []);
+            let numAvailable = 0;
+
+            Array.from(range(maxY + 1)).forEach(
+                y => Array.from(range(0, maxX, 3)).forEach(
+                    x => {
+                        if ((busCells[0] && posToString(busCells[0])) === posToString({ x, y })) busCells.shift();
+                        else {
+                            availableCells[y].push(x);
+                            numAvailable++;
+                        }
+                    }
+                )
+            );
+
+            return {
+                width: maxX,
+                freeSpaces: availableCells,
+                numLeft: numAvailable,
+            };
+        }
+    }
+
+    private diffToUpdate(diff: BusDifference, freeSpaces: FreeAreas): Update | undefined {
         switch (diff.type) {
             case "BusNameUpdate": {
-                console.log("ToSheetChange", diff);
                 let { x, y } = this.buses.find(bus => bus.id === diff.id)!.info;
 
                 return {
                     values: [[diff.name ?? ""]],
                     majorDimension: "ROWS",
                     range: `Locations!${xyToRange(x, y + 1)}:${xyToRange(x, y + 1)}`,
-                }
+                };
             }
 
             case "BusBoardingAreaUpdate": {
@@ -141,65 +196,146 @@ export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext
                     values: [[diff.boardingArea ?? ""]],
                     majorDimension: "ROWS",
                     range: `Locations!${xyToRange(x + 1, y + 1)}:${xyToRange(x + 1, y + 1)}`,
-                }
+                };
             }
 
             case "BusCreate": {
+                const y = freeSpaces.freeSpaces.findIndex(row => typeof row[0] === "number");
+                const x = freeSpaces.freeSpaces[y].shift()!;
+
+                freeSpaces.numLeft--;
+
+                return {
+                    values: [[diff.name ?? "", diff.boardingArea ?? ""]],
+                    majorDimension: "ROWS",
+                    range: `Locations!${xyToRange(x, y + 1)}:${xyToRange(x + 1, y + 1)}`,
+                };
             }
         }
     }
 
     // Updates the model and applies the changes to Google Sheets.
     async applyChanges(changes: BusDifference[], context: SheetContext): Promise<void> {
-        context.makeApiRequest(changes.map(diff => this.diffToUpdate(diff)).filter(update => update) as Update[]);
+        let freeSpaces = this.calcFreeSpaces();
+        const updates = [];
+        for (const diff of changes) {
+            let possUpdate = this.diffToUpdate(diff, freeSpaces)
+            if (possUpdate) updates.push(possUpdate);
+            if (freeSpaces.numLeft === 0) freeSpaces = this.calcFreeSpaces(freeSpaces);
+        }
+
+        context.makeApiRequest(updates);
     }
 }
 
 export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
-    constructor(public buses: BusModel<undefined>[]) {}
+    constructor(public buses: BusModel<undefined>[], public timeZone: string | null = null) {}
 
     public async updateFromYBB(context: YbbContext): Promise<void> {
-        const { school } = await context.query(getSchool, {schoolID: context.schoolId});
-        const newBusInfo = school.buses;
-        const newBuses: GetSchoolOutputType["school"]["buses"] = [];
-        newBusInfo.forEach(newBus => {
-            const idx = this.buses.findIndex(bus => bus.id === newBus.id);
-            if (idx !== -1) {
-                const bus = this.buses[idx];
+        logger.log("Updating YBBDataModel instance from YBB servers...");
+        logger.indent();
+        {
+            logger.log("Getting new data from YBB...");
+            const { school } = await context.query(getSchool, {schoolID: context.schoolId});
+            this.timeZone = school.timeZone;
 
+            const newBusInfo = school.buses;
+            const newBuses: GetSchoolOutputType["school"]["buses"] = [];
 
-                const newName = newBus.name ?? null;
-                if (bus.name !== newName) {
-                    bus.name = newName;
-                    bus.stale = false;
-                }
+            logger.log("Processing new YBB data [sorting into new/updated]...");
+            logger.indent();
+            {
+                newBusInfo.forEach(newBus => {
+                    const idx = this.buses.findIndex(bus => bus.id === newBus.id);
+                    if (idx !== -1) {
+                        const bus = this.buses[idx];
 
-                const invalidated = (newBus.invalidateTime ?? new Date(0)) > new Date(Date.now());
-                const newBoardingArea = invalidated ? newBus.boardingArea ?? null : null;
-                if (bus.boardingArea !== newBoardingArea) {
-                    bus.boardingArea = newBoardingArea;
-                    bus.stale = false;
-                }
-            } else newBuses.push(newBus);
-        });
-        this.buses.push(
-            ...newBuses.filter(bus => bus.name).map(bus => {
-                const invalidated = (bus.invalidateTime ?? new Date(0)) > new Date(Date.now());
-                return {
-                    id: bus.id,
-                    name: bus.name ?? null,
-                    boardingArea: invalidated ? bus.boardingArea ?? null : null,
-                    info: undefined,
-                    stale: false,
-                };
-            })
-        );
-        console.log(this.buses);
+                        let updatedArr = [];
+        
+                        const newName = newBus.name ?? null;
+                        if (bus.name !== newName) {
+                            bus.name = newName;
+                            bus.stale = false;
+                            updatedArr.push("Name");
+                        }
+        
+                        const invalidated = (newBus.invalidateTime ?? new Date(0)) > new Date(Date.now());
+                        const newBoardingArea = invalidated ? newBus.boardingArea ?? null : null;
+                        if (bus.boardingArea !== newBoardingArea) {
+                            bus.boardingArea = newBoardingArea;
+                            bus.stale = false;
+                            updatedArr.push("Boarding Area");
+                        }
+
+                        const updatedString = updatedArr.join(", ");
+                        if (updatedArr.length === 0) logger.log(`${bus.id} - Nothing updated`);
+                        else logger.log(`${bus.id} - ${updatedString} updated`);
+                    } else if (newBus.name) {
+                        logger.log(`New bus: ${newBus.name} (${newBus.id})`);
+                        newBuses.push(newBus);
+                    }
+                });
+            }
+            logger.unindent();
+            
+            this.buses.push(
+                ...newBuses.map(bus => {
+                    const invalidated = (bus.invalidateTime ?? new Date(0)) > new Date(Date.now());
+                    return {
+                        id: bus.id,
+                        name: bus.name ?? null,
+                        boardingArea: invalidated ? bus.boardingArea ?? null : null,
+                        info: undefined,
+                        stale: false,
+                    };
+                })
+            );
+        }
+        logger.unindent();
+    }
+
+    getInvalidateTime(): string {
+        return DateTime.local().setZone(this.timeZone || "UTC").endOf("day").toISO();
     }
 
     // Updates the model and applies the changes to the YourBCABus backend.
     async applyChanges(changes: BusDifference[], context: YbbContext): Promise<void> {
-        
+        const queries: (() => PromiseLike<void>)[] = [];
+        const invalidateTime = this.getInvalidateTime();
+        for (const diff of changes) {
+            switch (diff.type) {
+                case "BusNameUpdate": {
+                    const { id } = diff;
+                    queries.push(async () => {
+                        const { bus } = await context.query(getBus, getBus.formatVariables(id));
+                        await context.query(updateBus, updateBus.formatVariables(id, {...bus, name: diff.name}));
+                    });
+                    break;
+                }
+
+                case "BusBoardingAreaUpdate": {
+                    const { id, boardingArea } = diff;
+                    queries.push(async () => {
+                        await context.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
+                    });
+                    break;
+                }
+
+                case "BusCreate": {
+                    const { boardingArea } = diff;
+                    queries.push(async () => {
+                        const { createBus: { id } } = await context.query(createBus, createBus.formatVariables(context.schoolId, diff.name));
+
+                        if (diff.boardingArea) {
+                            await context.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
+                        }
+                    });
+                    break;
+                }
+            }
+        }
+
+        await Promise.all(queries.map(query => query()));
     }
 }
 
@@ -232,12 +368,10 @@ export class GroundTruthDataModel implements DataModel<undefined> {
         const updates: BusDifference[] = [];
         const otherBuses = other.buses;
         for (const bus of this.buses) {
-            console.log(bus.name);
             const otherBus = otherBuses.find(otherBus => otherBus.id === bus.id);
             if (otherBus) {
                 if (bus.name !== otherBus.name) updates.push({ type: "BusNameUpdate", id: bus.id!, name: bus.name });
                 if (bus.boardingArea !== otherBus.boardingArea) updates.push({ type: "BusBoardingAreaUpdate", id: bus.id!, boardingArea: bus.boardingArea });
-                console.log(" ", bus.boardingArea, bus.name, otherBus.name)
             } else {
                 updates.push({ type: "BusCreate", id: bus.id, name: bus.name, boardingArea: bus.boardingArea });
             }
@@ -247,12 +381,9 @@ export class GroundTruthDataModel implements DataModel<undefined> {
     }
 
     public update(ybbDataModel?: YBBDataModel, sheetsDataModel?: SheetDataModel) {
-        console.log("Pre-update GroundTruthDataModel Buses:", this.buses);
         // Diff the changes.
         const ybbChanges = ybbDataModel ? this.diffIncomingChanges(ybbDataModel) : [];
-        console.log("Pre-update GroundTruthDataModel Buses 2:", this.buses);
         const sheetsChanges = sheetsDataModel ? this.diffIncomingChanges(sheetsDataModel) : [];
-        console.log("Pre-update GroundTruthDataModel Buses 3:", this.buses);
 
         // Deduplicate the changes, giving priority to YBB changes.
         const changes: BusDifference[] = [];
@@ -270,7 +401,6 @@ export class GroundTruthDataModel implements DataModel<undefined> {
             changes.push(change);
         });
         sheetsChanges.forEach(change => {
-            console.log(change);
             if (change.type === "BusNameUpdate" && !seenNameChanges.has(change.id)) {
                 seenNameChanges.add(change.id);
                 changes.push(change);
@@ -288,7 +418,6 @@ export class GroundTruthDataModel implements DataModel<undefined> {
             if (change.type === "BusNameUpdate") {
                 const bus = this.buses.find(bus => bus.id === change.id);
                 if (bus) bus.name = change.name;
-                console.log(bus?.id, change.id);
             } else if (change.type === "BusBoardingAreaUpdate") {
                 const bus = this.buses.find(bus => bus.id === change.id);
                 if (bus) bus.boardingArea = change.boardingArea;

@@ -47,3 +47,32 @@ export const askQuestion = async (question: string) => {
 export function hasOwnProperty<X extends object, Y extends PropertyKey>(obj: X, prop: Y): obj is X & Record<Y, unknown> {
     return Object.prototype.hasOwnProperty.call(obj, prop);
 }
+
+export class Logger {
+    private level: number;
+    constructor(private startLevel: number = 0, private perIndent: number = 2) {
+        this.level = startLevel;
+    }
+
+    public log(...args: any[]) {
+        if (this.level <= 0) console.log(...args);
+        else console.log(" ".repeat(this.level - 1), ...args);
+    }
+
+    public error(...args: any[]) {
+        if (this.level <= 0) console.error(...args);
+        else console.error(" ".repeat(this.level - 1), ...args);
+    }
+
+    public indent() {
+        this.level += this.perIndent;
+    }
+
+    public unindent() {
+        this.level -= this.perIndent;
+    }
+
+    public reset() {
+        this.level = this.startLevel;
+    }
+}

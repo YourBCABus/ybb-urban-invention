@@ -40,7 +40,7 @@ function validateFunction(input: unknown): ValidatedType {
 
 function formatVariables(
     busID: string,
-    boardingArea: string | undefined,
+    boardingArea: string | null,
     invalidateTime: string
 ) {
     const fallbackDate = new Date();
@@ -62,6 +62,7 @@ const updateBusStatus: Query<ValidatedType, typeof formatVariables> = {
     queryText: updateBusStatusMutationText,
     formatVariables,
     validateFunction,
+    queryName: "updateBusStatus",
 };
 
 export default updateBusStatus;

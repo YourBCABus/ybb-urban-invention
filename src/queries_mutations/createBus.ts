@@ -34,7 +34,7 @@ function validateFunction(input: unknown): ValidatedType {
 
 function formatVariables(
     schoolID: string,
-    name: string,
+    name: string | null,
 ) {
     return {schoolID, name};
 }
@@ -43,6 +43,7 @@ const createBus: Query<ValidatedType, typeof formatVariables> = {
     queryText: createBusMutationText,
     formatVariables,
     validateFunction,
+    queryName: "createBus",
 };
 
 export default createBus;
