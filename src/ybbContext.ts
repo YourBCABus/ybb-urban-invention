@@ -26,7 +26,7 @@ export default class YbbContext {
     }
 
     public async query<T>(query: Query<T, FormatVarsType>, variables?: Record<string, unknown>, log: boolean = false): Promise<T> {
-        if (log) logger.log(`Running query \`${query.queryName}\``);
+        if (log) logger.log(`Running query \`${query.queryName}\`...`);
 
         let output: T;
 

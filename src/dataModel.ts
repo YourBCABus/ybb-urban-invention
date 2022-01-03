@@ -113,26 +113,30 @@ export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext
     constructor(public buses: SheetBusModel[]) {}
 
     public updateFromSheetAndYbb(rawSheet: string[][], ybbModel: YBBDataModel): void {
-        logger.log()
-        const sheet = rawSheet.slice(1);
-
-        const usedPositions = new Set<string>();
-        this.buses.forEach(bus => bus.updateFromSheet(sheet, usedPositions));
-        
-        const newBuses = mapPositions(
-            sheet,
-            (data, pos) => new SheetBusModel(null, data[0].trim(), data[1].trim(), pos),
-            (data, pos) => data[0].trim().length !== 0 && !usedPositions.has(`${pos.x},${pos.y}`)
-        );
-        this.buses.push(...newBuses);
-        this.buses = this.buses.filter(bus => bus.name).map(bus => {
-            if (!bus.id) {
-                const id = ybbModel.buses.find(ybbBus => ybbBus.name === bus.name)?.id ?? null;
-                bus.id = id;
-            }
-            bus.boardingArea ||= null;
-            return bus;
-        });
+        logger.log("Updating sheet model...");
+        logger.indent();
+        {
+            const sheet = rawSheet.slice(1);
+    
+            const usedPositions = new Set<string>();
+            this.buses.forEach(bus => bus.updateFromSheet(sheet, usedPositions));
+            
+            const newBuses = mapPositions(
+                sheet,
+                (data, pos) => new SheetBusModel(null, data[0].trim(), data[1].trim(), pos),
+                (data, pos) => data[0].trim().length !== 0 && !usedPositions.has(`${pos.x},${pos.y}`)
+            );
+            this.buses.push(...newBuses);
+            this.buses = this.buses.filter(bus => bus.name).map(bus => {
+                if (!bus.id) {
+                    const id = ybbModel.buses.find(ybbBus => ybbBus.name === bus.name)?.id ?? null;
+                    bus.id = id;
+                }
+                bus.boardingArea ||= null;
+                return bus;
+            });
+        }
+        logger.unindent();
     }
 
     private calcFreeSpaces(oldAreas?: FreeAreas): FreeAreas {
@@ -236,7 +240,7 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
         logger.indent();
         {
             logger.log("Getting new data from YBB...");
-            const { school } = await context.query(getSchool, {schoolID: context.schoolId});
+            const { school } = await context.query(getSchool, {schoolID: context.schoolId}, true);
             this.timeZone = school.timeZone;
 
             const newBusInfo = school.buses;

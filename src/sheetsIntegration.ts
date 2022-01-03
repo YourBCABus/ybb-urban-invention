@@ -5,6 +5,7 @@ import { readFile, writeFile } from "fs/promises";
 import { Credentials, OAuth2Client } from "google-auth-library";
 
 import { askQuestion } from "./utils.js";
+import { logger } from "./urban-invention.js";
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
@@ -122,6 +123,7 @@ export default class SheetContext {
     }
 
     public async getSheet(): Promise<string[][]> {
+        logger.log("Resquesting sheet data...");
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: this.id,
             majorDimension: "ROWS",
@@ -130,6 +132,7 @@ export default class SheetContext {
             range: "Locations!A:ZZ"
         });
         const rawValues = response.data.values || [];
+        logger.log("Sheet data obtained!");
         return rawValues.map(row => row.map(cell => String(cell)));
     }
 }

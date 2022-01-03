@@ -19,7 +19,13 @@ async function sync(
     {
         await dataModels.ybb.updateFromYBB(ybbContext);
     
-        dataModels.sheet.updateFromSheetAndYbb(await sheetContext.getSheet(), dataModels.ybb);
+        logger.log("Updating sheet model from new data...");
+        logger.indent();
+        {
+            const sheetData = await sheetContext.getSheet();
+            dataModels.sheet.updateFromSheetAndYbb(sheetData, dataModels.ybb);
+        }
+        logger.unindent();
     
         dataModels.truth.update(dataModels.ybb, dataModels.sheet);
 
