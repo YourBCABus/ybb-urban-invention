@@ -74,7 +74,7 @@ const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
 
 (async () => {
     const dataModels: DataModels = {
-        ybb: new YBBDataModel([]),
+        ybb: new YBBDataModel([], []),
         sheet: new SheetDataModel([]),
         truth: new GroundTruthDataModel([]),
     };

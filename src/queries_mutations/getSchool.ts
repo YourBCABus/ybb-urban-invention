@@ -10,6 +10,7 @@ query GetSchool($schoolID: ID!) {
             name
             boardingArea
             invalidateTime
+            available
         }
     }
 }
@@ -23,6 +24,7 @@ export type ValidatedType = {
             name?: string,
             boardingArea?: string,
             invalidateTime?: Date,
+            available: boolean
         }[]
     },
     
@@ -50,20 +52,23 @@ function validateFunction(input: unknown): ValidatedType {
                             hasOwnProperty(entry, "id") &&
                             hasOwnProperty(entry, "name") &&
                             hasOwnProperty(entry, "boardingArea") &&
-                            hasOwnProperty(entry, "invalidateTime")
+                            hasOwnProperty(entry, "invalidateTime") &&
+                            hasOwnProperty(entry, "available")
                     ) {
-                        const { id, name, boardingArea, invalidateTime } = entry;
+                        const { id, name, boardingArea, invalidateTime, available } = entry;
                         if (
                             (typeof id             === "string") &&
                             (typeof name           === "string" || name           === null) &&
                             (typeof boardingArea   === "string" || boardingArea   === null) &&
-                            (typeof invalidateTime === "string" || invalidateTime === null)
+                            (typeof invalidateTime === "string" || invalidateTime === null) &&
+                            (typeof available      === "boolean")
                         ) {
                             return {
                                 id,
                                 name: name ?? undefined,
                                 boardingArea: boardingArea ?? undefined,
                                 invalidateTime: invalidateTime ? new Date(invalidateTime) : undefined,
+                                available,
                             };
                         }
                     }

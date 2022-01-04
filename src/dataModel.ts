@@ -93,7 +93,12 @@ interface BusCreate {
     boardingArea: string | null;
 }
 
-export type BusDifference = BusNameUpdate | BusBoardingAreaUpdate | BusCreate;
+interface BusDelete {
+    type: "BusDelete";
+    id: string;
+}
+
+export type BusDifference = BusNameUpdate | BusBoardingAreaUpdate | BusCreate | BusDelete;
 
 export interface DataModel<T> {
     buses: BusModel<T>[];
@@ -215,6 +220,16 @@ export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext
                     range: `Locations!${xyToRange(x, y + 1)}:${xyToRange(x + 1, y + 1)}`,
                 };
             }
+
+            case "BusDelete": {
+                let { x, y } = this.buses.find(bus => bus.id === diff.id)!.info;
+
+                return {
+                    values: [[""]],
+                    majorDimension: "ROWS",
+                    range: `Locations!${xyToRange(x, y + 1)}:${xyToRange(x, y + 1)}`,
+                };
+            }
         }
     }
 
@@ -233,7 +248,7 @@ export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext
 }
 
 export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
-    constructor(public buses: BusModel<undefined>[], public timeZone: string | null = null) {}
+    constructor(public buses: BusModel<undefined>[], public deactivatedBuses: BusModel<undefined>[], public timeZone: string | null = null) {}
 
     public async updateFromYBB(context: YbbContext): Promise<void> {
         logger.log("Updating YBBDataModel instance from YBB servers...");
@@ -248,52 +263,61 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
 
             logger.log("Processing new YBB data [sorting into new/updated]...");
             logger.indent();
+            const busIds = new Set<string>();
+            this.deactivatedBuses = [];
             {
                 newBusInfo.forEach(newBus => {
                     const idx = this.buses.findIndex(bus => bus.id === newBus.id);
                     if (idx !== -1) {
-                        const bus = this.buses[idx];
+                        if (newBus.available) {
+                            const bus = this.buses[idx];
 
-                        let updatedArr = [];
-        
-                        const newName = newBus.name ?? null;
-                        if (bus.name !== newName) {
-                            bus.name = newName;
-                            bus.stale = false;
-                            updatedArr.push("Name");
-                        }
-        
-                        const invalidated = (newBus.invalidateTime ?? new Date(0)) > new Date(Date.now());
-                        const newBoardingArea = invalidated ? newBus.boardingArea ?? null : null;
-                        if (bus.boardingArea !== newBoardingArea) {
-                            bus.boardingArea = newBoardingArea;
-                            bus.stale = false;
-                            updatedArr.push("Boarding Area");
-                        }
+                            let updatedArr = [];
 
-                        const updatedString = updatedArr.join(", ");
-                        if (updatedArr.length === 0) logger.log(`${bus.id} - Nothing updated`);
-                        else logger.log(`${bus.id} - ${updatedString} updated`);
-                    } else if (newBus.name) {
+                            const newName = newBus.name ?? null;
+                            if (bus.name !== newName) {
+                                bus.name = newName;
+                                bus.stale = false;
+                                updatedArr.push("Name");
+                            }
+
+                            const invalidated = (newBus.invalidateTime ?? new Date(0)) > new Date(Date.now());
+                            const newBoardingArea = invalidated ? newBus.boardingArea ?? null : null;
+                            if (bus.boardingArea !== newBoardingArea) {
+                                bus.boardingArea = newBoardingArea;
+                                bus.stale = false;
+                                updatedArr.push("Boarding Area");
+                            }
+
+                            const updatedString = updatedArr.join(", ");
+                            if (updatedArr.length === 0) logger.log(`${bus.id} - Nothing updated`);
+                            else logger.log(`${bus.id} - ${updatedString} updated`);
+                            busIds.add(newBus.id);
+                        }
+                    } else if (newBus.name && newBus.available) {
                         logger.log(`New bus: ${newBus.name} (${newBus.id})`);
                         newBuses.push(newBus);
+                    }
+
+                    if (newBus.name && !newBus.available) {
+                        this.deactivatedBuses.push({id: newBus.id, name: newBus.name, boardingArea: null, info: undefined})
                     }
                 });
             }
             logger.unindent();
-            
-            this.buses.push(
-                ...newBuses.map(bus => {
-                    const invalidated = (bus.invalidateTime ?? new Date(0)) > new Date(Date.now());
-                    return {
-                        id: bus.id,
-                        name: bus.name ?? null,
-                        boardingArea: invalidated ? bus.boardingArea ?? null : null,
-                        info: undefined,
-                        stale: false,
-                    };
-                })
-            );
+
+            this.buses = this.buses.filter(
+                bus => bus.id && busIds.has(bus.id)
+            ).concat(newBuses.map(bus => {
+                const invalidated = (bus.invalidateTime ?? new Date(0)) > new Date(Date.now());
+                return {
+                    id: bus.id,
+                    name: bus.name ?? null,
+                    boardingArea: invalidated ? bus.boardingArea ?? null : null,
+                    info: undefined,
+                    stale: false,
+                };
+            }));
         }
         logger.unindent();
     }
@@ -336,6 +360,15 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
                     });
                     break;
                 }
+
+                case "BusDelete": {
+                    const { id } = diff;
+                    queries.push(async () => {
+                        const { bus } = await context.query(getBus, getBus.formatVariables(id));
+                        await context.query(updateBus, updateBus.formatVariables(id, { ...bus, available: false }));
+                        await context.query(updateBusStatus, updateBusStatus.formatVariables(id, null, invalidateTime));
+                    });
+                }
             }
         }
 
@@ -356,11 +389,15 @@ export class GroundTruthDataModel implements DataModel<undefined> {
             if (otherBus && !otherBus.stale) {
                 if (bus.name !== otherBus.name) updates.push({ type: "BusNameUpdate", id: otherBus.id!, name: otherBus.name });
                 if (bus.boardingArea !== otherBus.boardingArea) updates.push({ type: "BusBoardingAreaUpdate", id: otherBus.id!, boardingArea: otherBus.boardingArea });
+            } else if (bus.id && !otherBus?.stale) {
+                updates.push({ type: "BusDelete", id: bus.id });
             }
         }
 
         for (const bus of otherBuses) {
-            if (!this.buses.some(thisBus => thisBus.id === bus.id)) newBuses.push(bus);
+            if (!this.buses.some(thisBus => thisBus.id === bus.id)) {
+                newBuses.push(bus)
+            }
             if (bus.stale === false) bus.stale = true;
         }
 
@@ -380,6 +417,12 @@ export class GroundTruthDataModel implements DataModel<undefined> {
                 updates.push({ type: "BusCreate", id: bus.id, name: bus.name, boardingArea: bus.boardingArea });
             }
         }
+        
+        for (const bus of otherBuses) {
+            if (bus.id && !this.buses.some(thisBus => thisBus.id === bus.id)) {
+                updates.push({ type: "BusDelete", id: bus.id });
+            }
+        }
 
         return updates;
     }
@@ -394,6 +437,7 @@ export class GroundTruthDataModel implements DataModel<undefined> {
         const seenNameChanges = new Set<string>();
         const seenBoardingAreaChanges = new Set<string>();
         const seenBusCreationNames = new Set<string | null>();
+        const seenDeletes = new Set<string>();
         ybbChanges.forEach(change => {
             if (change.type === "BusNameUpdate") {
                 seenNameChanges.add(change.id);
@@ -401,6 +445,8 @@ export class GroundTruthDataModel implements DataModel<undefined> {
                 seenBoardingAreaChanges.add(change.id);
             } else if (change.type === "BusCreate") {
                 seenBusCreationNames.add(change.name);
+            } else if (change.type === "BusDelete") {
+                seenDeletes.add(change.id);
             }
             changes.push(change);
         });
@@ -413,6 +459,9 @@ export class GroundTruthDataModel implements DataModel<undefined> {
                 changes.push(change);
             } else if (change.type === "BusCreate" && !seenBusCreationNames.has(change.name)) {
                 seenBusCreationNames.add(change.name);
+                changes.push(change);
+            } else if (change.type === "BusDelete" && !seenDeletes.has(change.id)) {
+                seenDeletes.add(change.id);
                 changes.push(change);
             }
         });
@@ -432,6 +481,8 @@ export class GroundTruthDataModel implements DataModel<undefined> {
                     boardingArea: change.boardingArea,
                     info: undefined,
                 });
+            } else if (change.type === "BusDelete") {
+                this.buses = this.buses.filter(bus => bus.id !== change.id);
             }
         });
     }

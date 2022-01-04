@@ -2,8 +2,8 @@ import { Query } from "../ybbContext.js";
 import { hasOwnProperty } from "../utils.js";
 
 const updateBusMutationText = `
-mutation UpdateBus($schoolID: ID!, $bus: BusInput!) {
-    updateBus(schoolID: $schoolID, bus: $bus) {
+mutation UpdateBus($busID: ID!, $bus: BusInput!) {
+    updateBus(busID: $busID, bus: $bus) {
         id
     }
 }

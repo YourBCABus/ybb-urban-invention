@@ -11,6 +11,7 @@ export function* range(a: number, b?: number, step: number = 1): Generator<numbe
         if (a < 0) throw RangeError("Invalid range!");
         for (let i = 0; i < a; i++) yield i;
     } else {
+        if (a === b) return;
         if (step === 0 || (a - b < 0 ? step < 0 : step > 0)) throw RangeError("Invalid range!");
         for (let i = a; a <= b ? i < b : i > b; i+= step) yield i;
     }
