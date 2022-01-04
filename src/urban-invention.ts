@@ -6,7 +6,7 @@ import { Logger } from "./utils.js";
 
 export var logger = new Logger();
 
-const CRON_MODE_DELAY = 10 * 1000;
+const CRON_MODE_DELAY = 3 * 1000;
 
 async function sync(
     dataModels: DataModels,

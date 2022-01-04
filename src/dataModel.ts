@@ -91,6 +91,7 @@ interface BusCreate {
     id: string | null;
     name: string | null;
     boardingArea: string | null;
+    resolveID?(id: string): void;
 }
 
 interface BusDelete {
@@ -350,9 +351,10 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
                 }
 
                 case "BusCreate": {
-                    const { boardingArea } = diff;
+                    const { boardingArea, resolveID } = diff;
                     queries.push(async () => {
                         const { createBus: { id } } = await context.query(createBus, createBus.formatVariables(context.schoolId, diff.name));
+                        if (resolveID) resolveID(id);
 
                         if (diff.boardingArea) {
                             await context.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
@@ -376,8 +378,8 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
     }
 }
 
-export class GroundTruthDataModel implements DataModel<undefined> {
-    constructor(public buses: BusModel<undefined>[]) {}
+export class GroundTruthDataModel implements DataModel<((id: string) => void) | undefined> {
+    constructor(public buses: BusModel<((id: string) => void) | undefined>[]) {}
 
     // Diffs the two data models and returns a list of updates and new buses in other.
     diffIncomingChanges(other: DataModel<unknown>): BusDifference[] {
@@ -401,7 +403,15 @@ export class GroundTruthDataModel implements DataModel<undefined> {
             if (bus.stale === false) bus.stale = true;
         }
 
-        return [...updates, ...newBuses.map(bus => ({ type: "BusCreate" as "BusCreate", id: bus.id, name: bus.name, boardingArea: bus.boardingArea }))];
+        return [...updates, ...newBuses.map(bus => {
+            const change: BusCreate = { type: "BusCreate", id: bus.id, name: bus.name, boardingArea: bus.boardingArea };
+            if (!bus.id) {
+                change.resolveID = id => {
+                    bus.id = id;
+                };
+            }
+            return change;
+        })];
     }
 
     // Diffs the two data models and returns a list of changes.
@@ -414,7 +424,15 @@ export class GroundTruthDataModel implements DataModel<undefined> {
                 if (bus.name !== otherBus.name) updates.push({ type: "BusNameUpdate", id: bus.id!, name: bus.name });
                 if (bus.boardingArea !== otherBus.boardingArea) updates.push({ type: "BusBoardingAreaUpdate", id: bus.id!, boardingArea: bus.boardingArea });
             } else {
-                updates.push({ type: "BusCreate", id: bus.id, name: bus.name, boardingArea: bus.boardingArea });
+                updates.push({
+                    type: "BusCreate",
+                    id: bus.id,
+                    name: bus.name,
+                    boardingArea: bus.boardingArea,
+                    resolveID(id) {
+                        if (bus.info) bus.info(id);
+                    },
+                });
             }
         }
         
@@ -475,12 +493,22 @@ export class GroundTruthDataModel implements DataModel<undefined> {
                 const bus = this.buses.find(bus => bus.id === change.id);
                 if (bus) bus.boardingArea = change.boardingArea;
             } else if (change.type === "BusCreate") {
-                this.buses.push({
+                const bus: BusModel<((id: string) => void) | undefined> = {
                     id: change.id,
                     name: change.name,
                     boardingArea: change.boardingArea,
                     info: undefined,
-                });
+                };
+                if (!change.id) {
+                    bus.info = id => {
+                        bus.id = id;
+                        bus.info = undefined;
+                        if (change.resolveID) {
+                            change.resolveID(id);
+                        }
+                    };
+                }
+                this.buses.push(bus);
             } else if (change.type === "BusDelete") {
                 this.buses = this.buses.filter(bus => bus.id !== change.id);
             }
