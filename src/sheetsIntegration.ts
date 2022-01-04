@@ -43,7 +43,7 @@ const initSheetsOAuthHelpers = {
     
         return await initSheetsOAuthHelpers.getNewToken(
             oAuth2Client,
-            await askQuestion("Enter the code from that page here: "),
+            decodeURIComponent(await askQuestion("Enter the code from that page here: ")),
         );
     },
 };
