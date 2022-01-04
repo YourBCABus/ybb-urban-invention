@@ -353,9 +353,24 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
                 case "BusCreate": {
                     const { boardingArea, resolveID } = diff;
                     queries.push(async () => {
-                        const { createBus: { id } } = await context.query(createBus, createBus.formatVariables(context.schoolId, diff.name));
-                        if (resolveID) resolveID(id);
+                        let id: string;
 
+                        // Are there any deactivated buses we can reuse?
+                        const deactivatedBus = this.deactivatedBuses.find(bus => bus.boardingArea === boardingArea);
+                        if (deactivatedBus) {
+                            this.deactivatedBuses = this.deactivatedBuses.filter(bus => bus !== deactivatedBus);
+
+                            // Mark the bus as active.
+                            id = deactivatedBus.id!;
+                            const { bus } = await context.query(getBus, getBus.formatVariables(id));
+                            await context.query(updateBus, updateBus.formatVariables(id, { ...bus, available: true }));
+                        } else {
+                            // Create a new bus.
+                            const { createBus: data } = await context.query(createBus, createBus.formatVariables(context.schoolId, diff.name));
+                            id = data.id;
+                        }
+
+                        if (resolveID) resolveID(id);
                         if (diff.boardingArea) {
                             await context.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
                         }
