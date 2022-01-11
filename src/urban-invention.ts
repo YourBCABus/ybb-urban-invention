@@ -13,6 +13,7 @@ async function sync(
     ybbContext: YbbContext,
     sheetContext: SheetContext,
     upDownEnables: {sheetToYbb: boolean, ybbToSheet: boolean},
+    firstRun: boolean,
 ): Promise<void> {
     logger.log("Starting sync...");
     logger.indent();
@@ -27,7 +28,7 @@ async function sync(
         }
         logger.unindent();
     
-        dataModels.truth.update(dataModels.ybb, dataModels.sheet);
+        dataModels.truth.update(firstRun, dataModels.ybb, dataModels.sheet);
 
 
 
@@ -70,7 +71,7 @@ async function sync(
     logger.unindent();
 }
 
-const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
+const upDownEnables = { ybbToSheet: !process.env.DISABLE_WRITING_TO_SHEET, sheetToYbb: true };
 
 (async () => {
     const dataModels: DataModels = {
@@ -87,22 +88,24 @@ const upDownEnables = { ybbToSheet: true, sheetToYbb: true };
     
 
     if (process.env.CRON_MODE) {
+        let firstRun = true;
         while (true) {
             try {
                 logger.log(`Syncing at ${new Date().toUTCString()}...`);
-                await sync(dataModels, ybbContext, sheetContext, upDownEnables);
+                await sync(dataModels, ybbContext, sheetContext, upDownEnables, firstRun);
                 logger.reset();
             } catch (e) {
                 logger.reset();
                 logger.error(e);
                 logger.log("Sync interrupted.");
             }
+            firstRun = false;
             await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
         }
     } else {
         try {
             logger.log(`Syncing at ${new Date().toUTCString()}...`);
-            await sync(dataModels, ybbContext, sheetContext, upDownEnables);
+            await sync(dataModels, ybbContext, sheetContext, upDownEnables, true);
             logger.reset();
         } catch (e) {
             logger.reset();

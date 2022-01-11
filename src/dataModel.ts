@@ -460,7 +460,7 @@ export class GroundTruthDataModel implements DataModel<((id: string) => void) | 
         return updates;
     }
 
-    public update(ybbDataModel?: YBBDataModel, sheetsDataModel?: SheetDataModel) {
+    public update(firstRun: boolean, ybbDataModel?: YBBDataModel, sheetsDataModel?: SheetDataModel) {
         // Diff the changes.
         const ybbChanges = ybbDataModel ? this.diffIncomingChanges(ybbDataModel) : [];
         const sheetsChanges = sheetsDataModel ? this.diffIncomingChanges(sheetsDataModel) : [];
@@ -490,9 +490,17 @@ export class GroundTruthDataModel implements DataModel<((id: string) => void) | 
             } else if (change.type === "BusBoardingAreaUpdate" && !seenBoardingAreaChanges.has(change.id)) {
                 seenBoardingAreaChanges.add(change.id);
                 changes.push(change);
-            } else if (change.type === "BusCreate" && !seenBusCreationNames.has(change.name)) {
-                seenBusCreationNames.add(change.name);
-                changes.push(change);
+            } else if (change.type === "BusCreate") {
+                if (!seenBusCreationNames.has(change.name)) {
+                    seenBusCreationNames.add(change.name);
+                    changes.push(change);
+                } else if (firstRun && change.boardingArea) {
+                    // Look through the changes to see if there's a bus with the same name. If it has no boarding area, update it.
+                    const otherChange = changes.find(otherChange => otherChange.type === "BusCreate" && otherChange.name === change.name) as BusCreate;
+                    if (otherChange && !otherChange.boardingArea) {
+                        otherChange.boardingArea = change.boardingArea;
+                    }
+                }
             } else if (change.type === "BusDelete" && !seenDeletes.has(change.id)) {
                 seenDeletes.add(change.id);
                 changes.push(change);
