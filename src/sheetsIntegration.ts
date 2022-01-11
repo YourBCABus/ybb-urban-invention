@@ -133,7 +133,7 @@ export default class SheetContext {
         });
         const rawValues = response.data.values || [];
         logger.log("Sheet data obtained!");
-        return rawValues.map(row => row.map(cell => String(cell)));
+        return rawValues.map(row => row.slice(0, 6).map(cell => String(cell)));
     }
 }
 
