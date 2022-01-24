@@ -1,0 +1,33 @@
+{
+  "devDependencies": {
+    "@types/luxon": "^2.0.7",
+    "@types/node": "^16.11.11"
+  },
+  "dependencies": {
+    "googleapis": "^92.0.0",
+    "luxon": "^2.1.1",
+    "node-fetch": "^3.1.0",
+    "redis": "^4.0.0",
+    "typescript": "^4.5.2"
+  },
+  "name": "urban-invention",
+  "description": "",
+  "version": "1.0.0",
+  "main": "dist/urban-invention.js",
+  "scripts": {
+    "test": "tsc; node dist/urban-invention.js",
+    "build": "tsc",
+    "run": "node dist/urban-invention.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YourBCABus/urban-invention.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/YourBCABus/urban-invention/issues"
+  },
+  "homepage": "https://github.com/YourBCABus/urban-invention#readme",
+  "type": "module"
+}

@@ -1,4 +1,5 @@
-import { Query, hasOwnProperty } from "../context.ts";
+import { Query } from "../ybbContext.js";
+import { hasOwnProperty } from "../utils.js";
 
 const getSchoolQueryText = `
 query GetSchool($schoolID: ID!) {
@@ -9,6 +10,7 @@ query GetSchool($schoolID: ID!) {
             name
             boardingArea
             invalidateTime
+            available
         }
     }
 }
@@ -19,9 +21,10 @@ export type ValidatedType = {
         timeZone: string | null,
         buses: {
             id: string,
-            name: string,
+            name?: string,
             boardingArea?: string,
             invalidateTime?: Date,
+            available: boolean
         }[]
     },
     
@@ -49,20 +52,23 @@ function validateFunction(input: unknown): ValidatedType {
                             hasOwnProperty(entry, "id") &&
                             hasOwnProperty(entry, "name") &&
                             hasOwnProperty(entry, "boardingArea") &&
-                            hasOwnProperty(entry, "invalidateTime")
+                            hasOwnProperty(entry, "invalidateTime") &&
+                            hasOwnProperty(entry, "available")
                     ) {
-                        const { id, name, boardingArea, invalidateTime } = entry;
+                        const { id, name, boardingArea, invalidateTime, available } = entry;
                         if (
-                            typeof id              === "string" &&
-                            typeof name            === "string" &&
-                            (typeof boardingArea   === "string" || boardingArea === null)&&
-                            (typeof invalidateTime === "string" || invalidateTime === null)
+                            (typeof id             === "string") &&
+                            (typeof name           === "string" || name           === null) &&
+                            (typeof boardingArea   === "string" || boardingArea   === null) &&
+                            (typeof invalidateTime === "string" || invalidateTime === null) &&
+                            (typeof available      === "boolean")
                         ) {
                             return {
                                 id,
-                                name,
+                                name: name ?? undefined,
                                 boardingArea: boardingArea ?? undefined,
                                 invalidateTime: invalidateTime ? new Date(invalidateTime) : undefined,
+                                available,
                             };
                         }
                     }
@@ -90,6 +96,7 @@ const getSchool: Query<ValidatedType, typeof formatVariables> = {
     queryText: getSchoolQueryText,
     formatVariables,
     validateFunction,
+    queryName: "getSchool",
 };
 
 export default getSchool;

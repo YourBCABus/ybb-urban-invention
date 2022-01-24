@@ -1,6 +1,5 @@
-import { DateTime } from "https://raw.githubusercontent.com/moment/luxon/2.0.2/src/luxon.js";
-
-import { Query, hasOwnProperty } from "../context.ts";
+import { Query } from "../ybbContext.js";
+import { hasOwnProperty } from "../utils.js";
 
 
 const updateBusStatusMutationText = `
@@ -41,15 +40,20 @@ function validateFunction(input: unknown): ValidatedType {
 
 function formatVariables(
     busID: string,
-    boardingArea: string | undefined,
+    boardingArea: string | null,
     invalidateTime: string
 ) {
+    const fallbackDate = new Date();
+    fallbackDate.setHours(0);
+    fallbackDate.setMinutes(0);
+    fallbackDate.setSeconds(0);
+    fallbackDate.setMilliseconds(0);
     
     return {
         busID,
         boardingArea,
         invalidateTime: !boardingArea?.trim() || boardingArea.trim() === "?"
-            ? DateTime.now().startOf("day").toUTC().toISO()
+            ? fallbackDate.toISOString()
             : invalidateTime,
     };
 }
@@ -58,6 +62,7 @@ const updateBusStatus: Query<ValidatedType, typeof formatVariables> = {
     queryText: updateBusStatusMutationText,
     formatVariables,
     validateFunction,
+    queryName: "updateBusStatus",
 };
 
 export default updateBusStatus;

@@ -1,4 +1,5 @@
-import { Query, hasOwnProperty } from "../context.ts";
+import { Query } from "../ybbContext.js";
+import { hasOwnProperty } from "../utils.js";
 
 const createBusMutationText = `
 mutation CreateBus($schoolID: ID!, $name: String) {
@@ -33,7 +34,7 @@ function validateFunction(input: unknown): ValidatedType {
 
 function formatVariables(
     schoolID: string,
-    name: string,
+    name: string | null,
 ) {
     return {schoolID, name};
 }
@@ -42,6 +43,7 @@ const createBus: Query<ValidatedType, typeof formatVariables> = {
     queryText: createBusMutationText,
     formatVariables,
     validateFunction,
+    queryName: "createBus",
 };
 
 export default createBus;
