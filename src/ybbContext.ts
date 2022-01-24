@@ -56,7 +56,7 @@ export default class YbbContext {
             const { data, errors } = (await response.json()) as any;
             if (errors && errors.length > 0) {
                 logger.error(`Query ${query.queryName} failed! Throwing errors...`);
-                logger.error(errors);
+                logger.error(JSON.stringify(errors));
                 throw errors[0];
             } else {
                 output = query.validateFunction(data);
