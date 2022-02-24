@@ -95,19 +95,19 @@ const upDownEnables = { ybbToSheet: !process.env.DISABLE_WRITING_TO_SHEET, sheet
                 logger.log(`Syncing at ${new Date().toUTCString()}...`);
                 await sync(dataModels, ybbContext, sheetContext, upDownEnables, firstRun);
                 logger.reset();
+                (async () => {
+                    try {
+                        await fetch(`https://api.yourbcabus.com/urban-invention-uptime?token=${process.env.UI_TOKEN}`, { method: "PUT" });
+                    } catch (e) {
+                        logger.log("Couldn't ping fantastic-umbrella.");
+                    }
+                })();
             } catch (e) {
                 logger.reset();
                 logger.error(e);
                 logger.log("Sync interrupted.");
             }
             firstRun = false;
-            (async () => {
-                try {
-                    await fetch(`https://api.yourbcabus.com/urban-invention-uptime?token=${process.env.UI_TOKEN}`, {method: "PUT"});
-                } catch (e) {
-                    logger.log("Couldn't ping fantastic-umbrella.");
-                }
-            })();
             await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
         }
     } else {
