@@ -244,7 +244,7 @@ export class SheetDataModel implements UpdatableDataModel<SheetPos, SheetContext
             if (freeSpaces.numLeft === 0) freeSpaces = this.calcFreeSpaces(freeSpaces);
         }
 
-        context.makeApiRequest(updates);
+        await context.makeApiRequest(updates);
     }
 }
 
