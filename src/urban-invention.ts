@@ -1,5 +1,6 @@
 import YbbContext from "./ybbContext.js";
 import SheetContext from "./sheetsIntegration.js";
+import fetch from "node-fetch";
 
 import DataModels, { GroundTruthDataModel, SheetDataModel, YBBDataModel } from "./dataModel.js";
 import { Logger } from "./utils.js";
@@ -100,6 +101,13 @@ const upDownEnables = { ybbToSheet: !process.env.DISABLE_WRITING_TO_SHEET, sheet
                 logger.log("Sync interrupted.");
             }
             firstRun = false;
+            (async () => {
+                try {
+                    await fetch(`https://api.yourbcabus.com/urban-invention-uptime?token=${process.env.UI_TOKEN}`, {method: "PUT"});
+                } catch (e) {
+                    logger.log("Couldn't ping fantastic-umbrella.");
+                }
+            })();
             await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
         }
     } else {
