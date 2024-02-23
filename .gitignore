@@ -11,3 +11,6 @@ oauth-token.json
 
 # For YBB auth
 ybb-credentials.json
+
+# For logging messages
+discord-webhook-info.json

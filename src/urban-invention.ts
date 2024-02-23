@@ -3,9 +3,15 @@ import SheetContext from "./sheetsIntegration.js";
 import fetch from "node-fetch";
 
 import DataModels, { GroundTruthDataModel, SheetDataModel, YBBDataModel } from "./dataModel.js";
-import { Logger } from "./utils.js";
+import { DiscordLogTarget, Logger } from "./utils.js";
 
 export var logger = new Logger();
+logger.setTargets(
+    // await DiscordLogTarget.newFromFile("discord-webhook-info.json"),
+    console,
+);
+
+logger.warn("Urban Invention restarted!");
 
 const CRON_MODE_DELAY = 10 * 1000;
 
@@ -92,20 +98,21 @@ const upDownEnables = { ybbToSheet: !process.env.DISABLE_WRITING_TO_SHEET, sheet
         let firstRun = true;
         while (true) {
             try {
-                logger.log(`Syncing at ${new Date().toUTCString()}...`);
+                logger.info(`Syncing at ${new Date().toUTCString()}...`);
                 await sync(dataModels, ybbContext, sheetContext, upDownEnables, firstRun);
                 logger.reset();
                 (async () => {
                     try {
                         await fetch(`https://api.yourbcabus.com/urban-invention-uptime?token=${process.env.UI_TOKEN}`, { method: "PUT" });
                     } catch (e) {
-                        logger.log("Couldn't ping fantastic-umbrella.");
+                        logger.warn("Couldn't ping fantastic-umbrella.");
                     }
                 })();
+                logger.info(`Sync concluded at ${new Date().toUTCString()}...`);
             } catch (e) {
                 logger.reset();
                 logger.error(e);
-                logger.log("Sync interrupted.");
+                logger.warn("Sync interrupted.");
             }
             firstRun = false;
             await new Promise(resolve => setTimeout(resolve, CRON_MODE_DELAY));
@@ -117,8 +124,8 @@ const upDownEnables = { ybbToSheet: !process.env.DISABLE_WRITING_TO_SHEET, sheet
             logger.reset();
         } catch (e) {
             logger.reset();
+            logger.warn("Sync interrupted!");
             logger.error(e);
-            logger.log("Sync interrupted.");
         }
     }
 })();

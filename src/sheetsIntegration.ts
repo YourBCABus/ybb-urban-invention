@@ -7,13 +7,19 @@ import { Credentials, OAuth2Client } from "google-auth-library";
 import { askQuestion } from "./utils.js";
 import { logger } from "./urban-invention.js";
 
-// If modifying these scopes, delete token.json.
+/**
+ * If modifying these scopes, delete token.json.
+ */
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-// The file token.json stores the user's access and refresh tokens, and is
-// created automatically when the authorization flow completes for the first
-// time.
-const TOKEN_PATH = 'oauth-token.json';
+/**
+ * The file token.json stores the user's access and refresh tokens, and is
+ * created automatically when the authorization flow completes for the first
+ * time.
+ */
+
+ const TOKEN_PATH = 'oauth-token.json';
+ const CREDENTIALS_PATH = 'oauth-credentials.json';
 
 interface ClientInfo {
     web: {
@@ -53,30 +59,39 @@ async function initSheetsOAuth(): Promise<OAuth2Client> {
     const { getOauthClient, promptForOauthToken } = initSheetsOAuthHelpers;
 
     // Load oauth client info from a local file.
-    let cliInfoPromise: Promise<ClientInfo> = readFile('oauth-credentials.json', "utf-8").then(JSON.parse).catch(err => {
-        console.log('Error loading client secret file:', err);
-        process.exit(1);
+    let cliInfoPromise: Promise<ClientInfo> = readFile(CREDENTIALS_PATH, "utf-8").then(JSON.parse).catch(err => {
+        logger.error('Error loading client secret file.');
+        throw err;
     });
+
+    let oAuth2Client = await getOauthClient(cliInfoPromise);
+
+    const token = await readFile(TOKEN_PATH, "utf-8")
+        .then(JSON.parse)
+        .catch( () => {
+            logger.info("No token file found, regenerating...");
+
+        });
 
     // Attempt to load the token 
     let tokenPromise = readFile(TOKEN_PATH, "utf-8").then(JSON.parse);
-
-    let oAuth2Client: OAuth2Client;
+    
     try {
         const token = await tokenPromise;
 
-        oAuth2Client = await getOauthClient(cliInfoPromise);
         oAuth2Client.setCredentials(token);
-    } catch (e) {
+    }
+    // If awaiting the token
+    catch (e) {
         oAuth2Client = await getOauthClient(cliInfoPromise);
 
-        const token = await promptForOauthToken(oAuth2Client)
+        const token = await promptForOauthToken(oAuth2Client);
         oAuth2Client.setCredentials(token);
 
         // Store the token to disk for later program executions
         writeFile(TOKEN_PATH, JSON.stringify({...token, scopes: SCOPES}))
-            .then(() => console.log(`Token stored to \`${TOKEN_PATH}\`.`))
-            .catch(err => console.error(`Failed to store token to ${TOKEN_PATH}. Error:`, err));
+            .then(() => logger.info(`Token stored to \`${TOKEN_PATH}\`.`))
+            .catch(err => logger.error(`Failed to store token to ${TOKEN_PATH}. Error:`, err));
     }
     return oAuth2Client;
 }
@@ -136,14 +151,3 @@ export default class SheetContext {
         return rawValues.map(row => row.slice(0, 6).map(cell => String(cell)));
     }
 }
-
-// (async () => {
-//     const context = await SheetContext.authenticateAndCreate(process.env.SPREADSHEET_ID!);
-
-//     context.makeApiRequest([{
-//         values: [["Hello!"]],
-//         majorDimension: "ROWS",
-//         range: `Locations!${xyToRange(6, 24)}:${xyToRange(6, 24)}`,
-//     }]);
-
-// })();

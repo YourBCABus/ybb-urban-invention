@@ -292,11 +292,11 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
 
                             const updatedString = updatedArr.join(", ");
                             if (updatedArr.length === 0) logger.log(`${bus.id} - Nothing updated`);
-                            else logger.log(`${bus.id} - ${updatedString} updated`);
+                            else logger.info(`${bus.id} - ${updatedString} updated`);
                             busIds.add(newBus.id);
                         }
                     } else if (newBus.name && newBus.available) {
-                        logger.log(`New bus: ${newBus.name} (${newBus.id})`);
+                        logger.info(`New bus: ${newBus.name} (${newBus.id})`);
                         newBuses.push(newBus);
                     }
 
@@ -345,6 +345,7 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
                 case "BusBoardingAreaUpdate": {
                     const { id, boardingArea } = diff;
                     queries.push(async () => {
+                        // await context.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, DateTime.local().toISO()));
                         await context.query(updateBusStatus, updateBusStatus.formatVariables(id, boardingArea, invalidateTime));
                     });
                     break;
@@ -362,7 +363,7 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
 
                             // Mark the bus as active.
                             id = deactivatedBus.id!;
-                            const { bus } = await context.query(getBus, getBus.formatVariables(id));
+                            const { bus } = await context.query(getBus, getBus.formatVariables(id), true);
                             await context.query(updateBus, updateBus.formatVariables(id, { ...bus, available: true }));
                         } else {
                             // Create a new bus.
@@ -389,7 +390,10 @@ export class YBBDataModel implements UpdatableDataModel<undefined, YbbContext> {
             }
         }
 
-        await Promise.all(queries.map(query => query()));
+        for (const query of queries) {
+            await query();
+        }
+        // await Promise.all(queries.map(query => query()));
     }
 }
 
@@ -438,6 +442,7 @@ export class GroundTruthDataModel implements DataModel<((id: string) => void) | 
             if (otherBus) {
                 if (bus.name !== otherBus.name) updates.push({ type: "BusNameUpdate", id: bus.id!, name: bus.name });
                 if (bus.boardingArea !== otherBus.boardingArea) updates.push({ type: "BusBoardingAreaUpdate", id: bus.id!, boardingArea: bus.boardingArea });
+                // updates.push({ type: "BusBoardingAreaUpdate", id: bus.id!, boardingArea: bus.boardingArea });
             } else {
                 updates.push({
                     type: "BusCreate",
