@@ -127,7 +127,6 @@ export default class YbbContext {
     ): Promise<R> {
         if (log) logger.log(`Running query \`${query.queryName}\`...`);
 
-        console.log(this.token);
         let output: R;
 
         logger.indent();
